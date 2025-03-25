@@ -1,69 +1,104 @@
+import streamlit as st
 import random
 from collections import defaultdict
 
-class MarkovChain:
-    def __init__(self):
-        self.chain = defaultdict(list)
+def train_markov_chain(text, chain_length=2):
+    """Train Markov chain model from the input text."""
+    words = text.split()
+    markov_chain = defaultdict(list)
     
-    def train(self, text, order=2):
-        words = text.split()
-        for i in range(len(words) - order):
-            state = tuple(words[i:i + order])
-            next_word = words[i + order]
-            self.chain[state].append(next_word)
+    for i in range(len(words) - chain_length):
+        current_state = ' '.join(words[i:i+chain_length])
+        next_word = words[i+chain_length]
+        markov_chain[current_state].append(next_word)
     
-    def generate(self, length=50, order=2):
-        if not self.chain:
-            return "No training data provided"
-        
-        current_state = random.choice(list(self.chain.keys()))
-        result = list(current_state)
-        
-        for _ in range(length - order):
-            possible_words = self.chain.get(current_state, [])
-            if not possible_words:
-                break
-            
-            next_word = random.choice(possible_words)
-            result.append(next_word)
-            current_state = tuple(result[-order:])
-        
-        return ' '.join(result)
+    return markov_chain
 
-def main():
-    print("Markov Chain Text Generator")
-    
-    # Sample training text
-    sample_text = """This is a sample text. It shows how the Markov chain 
-    works. The chain generates new text based on patterns in this input."""
-    
-    mc = MarkovChain()
-    mc.train(sample_text)
-    
-    while True:
-        print("\nOptions:")
-        print("1. Generate text")
-        print("2. Train with new text")
-        print("3. Exit")
+def generate_lyrics(markov_chain, length=50, chain_length=2):
+    """Generate lyrics using trained Markov chain."""
+    if not markov_chain:
+        return "Please train first with some lyrics"
         
-        choice = input("Enter choice: ")
+    current_state = random.choice(list(markov_chain.keys()))
+    lyrics = current_state.split()
+    
+    for _ in range(length - chain_length):
+        possible_next_words = markov_chain.get(current_state, [])
         
-        if choice == "1":
-            length = int(input("Enter output length (words): "))
-            print("\nGenerated text:")
-            print(mc.generate(length))
-            
-        elif choice == "2":
-            new_text = input("Enter training text: ")
-            mc.train(new_text)
-            print("Text trained successfully")
-            
-        elif choice == "3":
-            print("Exiting program")
+        if not possible_next_words:
             break
             
-        else:
-            print("Invalid choice")
+        next_word = random.choice(possible_next_words)
+        lyrics.append(next_word)
+        current_state = ' '.join(lyrics[-chain_length:])
+    
+    return ' '.join(lyrics)
 
-if __name__ == "__main__":
-    main()
+# Streamlit app
+st.title("🎵 Advanced Lyrics Generator")
+
+# File upload section
+uploaded_file = st.file_uploader("Upload a text file with lyrics", type=['txt'])
+
+# Text area for input lyrics (will be pre-filled if file is uploaded)
+input_lyrics = st.text_area(
+    "Or paste lyrics here:",
+    help="You can use either file upload or paste text directly"
+)
+
+# If file is uploaded, read its contents
+if uploaded_file is not None:
+    file_contents = uploaded_file.read().decode("utf-8")
+    input_lyrics = st.text_area(
+        "Edit the uploaded lyrics if needed:",
+        value=file_contents,
+        height=300
+    )
+
+# Sidebar controls
+with st.sidebar:
+    st.header("Settings")
+    chain_length = st.slider("Markov chain length", 1, 4, 2,
+                           help="Higher values make output more similar to input")
+    output_length = st.slider("Output length (words)", 10, 100, 30)
+    generate_btn = st.button("Generate Lyrics")
+
+# When generate button is clicked
+if generate_btn:
+    if not input_lyrics.strip():
+        st.warning("Please provide some lyrics first (upload file or paste text)")
+    else:
+        with st.spinner("Training model and generating lyrics..."):
+            try:
+                model = train_markov_chain(input_lyrics, chain_length)
+                generated = generate_lyrics(model, output_length, chain_length)
+                
+                st.subheader("Generated Lyrics")
+                st.text_area("Your generated lyrics", 
+                           value=generated, 
+                           height=200,
+                           label_visibility="collapsed")
+                
+                # Add download button
+                st.download_button(
+                    label="Download Lyrics",
+                    data=generated,
+                    file_name="generated_lyrics.txt",
+                    mime="text/plain"
+                )
+            except Exception as e:
+                st.error(f"An error occurred: {str(e)}")
+
+# Add some instructions
+st.markdown("""
+### How to use:
+1. Either upload a text file with lyrics OR paste lyrics in the text box
+2. Adjust settings in the sidebar
+3. Click "Generate Lyrics"
+4. Enjoy your new song and download it if you like!
+
+### Tips:
+- Try different chain lengths to get different styles
+- The more text you provide, the better the results
+- You can edit uploaded lyrics before generating
+""")
